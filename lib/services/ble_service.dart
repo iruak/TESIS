@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'db_service.dart';
 
 enum BleConnectionState {
   desconectado,
@@ -114,6 +115,9 @@ class BleService extends ChangeNotifier {
         
         _procesarMensajeEntrante("STATUS|ON|${v.toStringAsFixed(1)}|$b");
       });
+
+      // Simular sincronización de históricos pendientes tras conectar
+      Future.delayed(const Duration(seconds: 1), _simularSync);
     } else {
       // TODO: Implementación real de flutter_blue_plus (connect) solo cuando modoSimulado == false
     }
@@ -207,6 +211,50 @@ class BleService extends ChangeNotifier {
       _vacaIdActual = 0;
       debugPrint('[BleService] Timer de ordeño cancelado y estado reseteado');
       notifyListeners();
+    }
+  }
+
+  // ==========================================
+  // SIMULACIÓN DE SINCRONIZACIÓN
+  // ==========================================
+
+  /// Emite entre 0 y 3 registros SYNC_DATA ficticios usando las vacas reales
+  /// de la DB, seguidos de un SYNC_END. Solo en modoSimulado.
+  Future<void> _simularSync() async {
+    if (!modoSimulado) return;
+    debugPrint('[BleService] Iniciando simulación de sincronización...');
+
+    try {
+      final vacas = await DBService().obtenerVacas();
+      if (vacas.isEmpty) {
+        debugPrint('[BleService] No hay vacas registradas, enviando SYNC_END sin datos.');
+        _procesarMensajeEntrante('SYNC_END');
+        return;
+      }
+
+      final cantidad = _rnd.nextInt(4); // 0, 1, 2 o 3 registros
+      debugPrint('[BleService] Simulando $cantidad registro(s) de sincronización...');
+
+      for (int i = 0; i < cantidad; i++) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        final vaca = vacas[_rnd.nextInt(vacas.length)];
+        final diasAtras = _rnd.nextInt(5) + 1; // entre 1 y 5 días atrás
+        final fecha = DateTime.now().subtract(Duration(days: diasAtras));
+        final fechaStr =
+            '${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
+        final hora = '0${_rnd.nextInt(2) + 5}:${_rnd.nextInt(60).toString().padLeft(2, '0')}';
+        final litros = (5.0 + _rnd.nextDouble() * 5.0).toStringAsFixed(2);
+        final msg = 'SYNC_DATA|${vaca.id}|$litros|$fechaStr|$hora|0';
+        debugPrint('[BleService] Emitiendo: $msg');
+        _procesarMensajeEntrante(msg);
+      }
+
+      await Future.delayed(const Duration(milliseconds: 300));
+      debugPrint('[BleService] Emitiendo SYNC_END');
+      _procesarMensajeEntrante('SYNC_END');
+    } catch (e) {
+      debugPrint('[BleService] Error en _simularSync: $e');
+      _procesarMensajeEntrante('SYNC_END');
     }
   }
 

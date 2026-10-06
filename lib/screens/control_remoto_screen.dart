@@ -185,14 +185,17 @@ class _ControlRemotoScreenState extends State<ControlRemotoScreen> {
                             const Icon(Icons.send_rounded, color: Colors.green),
                         onTap: () async {
                           Navigator.pop(ctx);
-                          await _ble.enviarComando('NEXT|${vaca.numero}');
+                          // Iniciar el ordeño en BleService para que OrdeñoScreen
+                          // lo detecte como activo (estaOrdenando = true)
+                          await _ble.iniciarOrdeno(vaca.id!);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                    'Siguiente vaca configurada: ${vaca.nombre} (#${vaca.numero})'),
+                                    '✅ Ordeñando: ${vaca.nombre} (#${vaca.numero})'),
                                 backgroundColor: Colors.green,
                                 behavior: SnackBarBehavior.floating,
+                                duration: const Duration(seconds: 3),
                               ),
                             );
                           }

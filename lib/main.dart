@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'screens/splash_screen.dart';
+import 'screens/bienvenida_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/historial_screen.dart';
 import 'screens/agregar_vaca_screen.dart';
 import 'screens/ordeno_screen.dart';
 import 'screens/historial_vaca_screen.dart';
 import 'screens/control_remoto_screen.dart';
-
-import 'screens/bienvenida_screen.dart';
+import 'services/sync_service.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Arranca el servicio de sincronización para que escuche eventos BLE
+  // desde el inicio de la app, aunque HomeScreen no esté montado aún.
+  SyncService().iniciar();
   runApp(const SistemaOrdenoApp());
 }
 
@@ -19,6 +24,7 @@ class SistemaOrdenoApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Sistema Ordeño',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -30,7 +36,8 @@ class SistemaOrdenoApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const BienvenidaScreen(),
+        '/': (context) => const SplashScreen(),
+        '/bienvenida': (context) => const BienvenidaScreen(),
         '/home': (context) => const HomeScreen(),
         '/historial': (context) => const HistorialScreen(),
         '/agregar_vaca': (context) => const AgregarVacaScreen(),

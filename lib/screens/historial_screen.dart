@@ -5,6 +5,7 @@ import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/db_service.dart';
+import '../services/sync_service.dart';
 import '../models/vaca.dart';
 import '../models/registro_ordeno.dart';
 
@@ -17,6 +18,7 @@ class HistorialScreen extends StatefulWidget {
 
 class _HistorialScreenState extends State<HistorialScreen> {
   final DBService _dbService = DBService();
+  final SyncService _sync = SyncService();
   late Future<_HistorialData> _historialDataFuture;
   DateTime _selectedDate = DateTime.now();
   bool _isExporting = false;
@@ -25,6 +27,22 @@ class _HistorialScreenState extends State<HistorialScreen> {
   void initState() {
     super.initState();
     _historialDataFuture = _cargarDatos();
+    _sync.addListener(_onSync);
+  }
+
+  void _onSync() {
+    // Recarga los datos cuando llega una sincronización completada
+    if (!_sync.sincronizando && mounted) {
+      setState(() {
+        _historialDataFuture = _cargarDatos();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _sync.removeListener(_onSync);
+    super.dispose();
   }
 
   Future<_HistorialData> _cargarDatos() async {

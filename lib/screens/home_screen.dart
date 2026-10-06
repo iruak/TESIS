@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/db_service.dart';
 import '../services/ble_service.dart';
+import '../services/sync_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,6 +13,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final BleService _ble = BleService();
+  final SyncService _sync = SyncService();
   String _ultimaSync = 'Nunca';
   late final StreamSubscription<String> _eventSub;
 
@@ -19,24 +21,63 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     debugPrint('[HomeScreen] initState ejecutado');
-    // Escuchar eventos del ESP32 para actualizar última sync
-    _eventSub = _ble.eventStream.listen((msg) {
-      debugPrint('[HomeScreen] Evento recibido en stream: $msg');
-      if (msg == 'SYNC_END') {
-        final now = DateTime.now();
-        final formatted =
-            '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
-            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-        if (mounted) {
-          setState(() => _ultimaSync = formatted);
-        }
+
+    // Cargar última sync guardada en DB al abrir la pantalla
+    DBService().obtenerUltimaSync().then((valor) {
+      if (valor != null && mounted) {
+        setState(() => _ultimaSync = valor);
       }
     });
+
+    // Escuchar eventos BLE para el stream de la tarjeta sync
+    // (respaldo por si SyncService no está montado aún)
+    _eventSub = _ble.eventStream.listen((msg) {
+      debugPrint('[HomeScreen] Evento BLE en stream: $msg');
+    });
+
+    // Suscribirse a SyncService para reaccionar cuando termina la sync
+    _sync.addListener(_onSyncChanged);
+  }
+
+  void _onSyncChanged() {
+    if (!mounted) return;
+    final result = _sync.ultimoResultado;
+
+    if (_sync.sincronizando) {
+      // Mostramos el estado en la tarjeta (se actualiza via setState)
+      setState(() {});
+      return;
+    }
+
+    if (result != null) {
+      setState(() => _ultimaSync = result.fechaHora);
+
+      if (result.insertados > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.cloud_done, color: Colors.white),
+                const SizedBox(width: 10),
+                Text('${result.insertados} registro(s) sincronizado(s)'),
+              ],
+            ),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } else {
+        // Sin registros nuevos, solo actualizamos la tarjeta silenciosamente
+        setState(() {});
+      }
+    }
   }
 
   @override
   void dispose() {
     debugPrint('[HomeScreen] dispose ejecutado');
+    _sync.removeListener(_onSyncChanged);
     _eventSub.cancel();
     super.dispose();
   }
@@ -236,22 +277,41 @@ class _HomeScreenState extends State<HomeScreen> {
             // ── Tarjeta de Última Sincronización ──
             Card(
               elevation: 1,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              color: _sync.sincronizando
+                  ? Colors.blue.shade50
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
+                side: _sync.sincronizando
+                    ? BorderSide(color: Colors.blue.shade300, width: 1)
+                    : BorderSide.none,
               ),
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+                padding: const EdgeInsets.symmetric(
+                    vertical: 12.0, horizontal: 16.0),
                 child: Row(
                   children: [
-                    const Icon(Icons.sync, color: Colors.black54),
+                    if (_sync.sincronizando)
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.blue.shade700,
+                        ),
+                      )
+                    else
+                      const Icon(Icons.sync, color: Colors.black54),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Última sync: $_ultimaSync',
-                        style: const TextStyle(
-                          color: Colors.black87,
+                        _sync.sincronizando
+                            ? 'Sincronizando datos...'
+                            : 'Última sync: $_ultimaSync',
+                        style: TextStyle(
+                          color: _sync.sincronizando
+                              ? Colors.blue.shade700
+                              : Colors.black87,
                           fontWeight: FontWeight.w500,
                         ),
                       ),

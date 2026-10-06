@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:csv/csv.dart';
 import '../services/db_service.dart';
+import '../services/sync_service.dart';
 import '../models/vaca.dart';
 import '../models/registro_ordeno.dart';
 
@@ -19,6 +20,7 @@ class HistorialVacaScreen extends StatefulWidget {
 
 class _HistorialVacaScreenState extends State<HistorialVacaScreen> {
   final DBService _dbService = DBService();
+  final SyncService _sync = SyncService();
   late Future<_HistorialVacaData> _dataFuture;
   Vaca? _vaca;
   bool _isInit = false;
@@ -34,6 +36,21 @@ class _HistorialVacaScreenState extends State<HistorialVacaScreen> {
     final now = DateTime.now();
     _startDate = now.subtract(const Duration(days: 7));
     _endDate = now;
+    _sync.addListener(_onSync);
+  }
+
+  void _onSync() {
+    if (!_sync.sincronizando && mounted && _vaca != null) {
+      setState(() {
+        _dataFuture = _cargarDatos(_vaca!.id!);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _sync.removeListener(_onSync);
+    super.dispose();
   }
 
   @override
