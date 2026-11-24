@@ -1,11 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:csv/csv.dart';
 import '../services/db_service.dart';
 import '../services/sync_service.dart';
+import '../services/reporte_excel_service.dart';
 import '../models/vaca.dart';
 import '../models/registro_ordeno.dart';
 
@@ -133,10 +131,11 @@ class _HistorialVacaScreenState extends State<HistorialVacaScreen> {
     }
   }
 
-  Future<void> _exportarCsv(_HistorialVacaData data) async {
+  Future<void> _exportarExcel(_HistorialVacaData data) async {
     if (data.registros.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay datos para exportar en este rango')),
+        const SnackBar(
+            content: Text('No hay datos para exportar en este rango')),
       );
       return;
     }
@@ -146,34 +145,37 @@ class _HistorialVacaScreenState extends State<HistorialVacaScreen> {
     });
 
     try {
-      final List<List<dynamic>> rows = [];
-      // Header
-      rows.add(['Fecha', 'Hora', 'Litros', 'Estado']);
+      final path = await ReporteExcelService.generarReporteVacaIndividual(
+        vaca: _vaca!,
+        fechaInicio: _startDate,
+        fechaFin: _endDate,
+        registros: data.registros,
+        total: data.totalRango,
+        promedio: data.promedio,
+      );
 
-      // Data
-      for (final r in data.registros) {
-        rows.add([r.fecha, r.hora, r.litros, 'Completado']);
-      }
+      final String startDateStr = DateFormat('dd/MM/yyyy').format(_startDate);
+      final String endDateStr = DateFormat('dd/MM/yyyy').format(_endDate);
 
-      final String csvData = ListToCsvConverter().convert(rows);
-
-      final directory = await getTemporaryDirectory();
-      
-      final String startDateStr = DateFormat('yyyy-MM-dd').format(_startDate);
-      final String endDateStr = DateFormat('yyyy-MM-dd').format(_endDate);
-      final String nombreVaca = _vaca!.nombre.replaceAll(' ', '_').toLowerCase();
-      
-      final String path = '${directory.path}/historial_${nombreVaca}_${startDateStr}_a_$endDateStr.csv';
-      
-      final File file = File(path);
-      await file.writeAsString(csvData);
-
-      await SharePlus.instance.share(ShareParams(files: [XFile(path)], text: 'Historial de Ordeño - ${_vaca!.nombre}'));
-      
+      await SharePlus.instance.share(ShareParams(
+        files: [
+          XFile(
+            path,
+            mimeType:
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          )
+        ],
+        text:
+            'Historial de Ordeño - ${_vaca!.nombre} (#${_vaca!.numero}) del $startDateStr al $endDateStr',
+      ));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al exportar: $e')),
+          SnackBar(
+            content: Text('Error al exportar reporte: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -373,18 +375,25 @@ class _HistorialVacaScreenState extends State<HistorialVacaScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton.icon(
-                              onPressed: (hasRecords && !_isExporting) ? () => _exportarCsv(data) : null,
+                              onPressed: (hasRecords && !_isExporting)
+                                  ? () => _exportarExcel(data)
+                                  : null,
                               icon: _isExporting
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,
-                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                          color: Colors.white, strokeWidth: 2),
                                     )
-                                  : const Icon(Icons.file_download),
-                              label: Text(_isExporting ? 'Exportando...' : 'Exportar CSV'),
+                                  : const Icon(Icons.table_view_rounded),
+                              label: Text(_isExporting
+                                  ? 'Exportando...'
+                                  : 'Exportar Excel'),
                               style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                backgroundColor: Theme.of(context).colorScheme.secondary,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.secondary,
                               ),
                             ),
                           ),

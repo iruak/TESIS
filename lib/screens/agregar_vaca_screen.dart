@@ -237,10 +237,10 @@ class _AgregarVacaScreenState extends State<AgregarVacaScreen> {
                       TextFormField(
                         controller: _numeroController,
                         decoration: const InputDecoration(
-                          labelText: 'Número',
-                          hintText: 'Ej. 04',
+                          labelText: 'Número / Arete RFID (RC522)',
+                          hintText: 'Ej. 04 o código del arete',
                           border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.tag),
+                          prefixIcon: Icon(Icons.nfc_rounded),
                         ),
                         keyboardType: TextInputType.text,
                         validator: _validarNumero,

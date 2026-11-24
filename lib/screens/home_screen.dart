@@ -237,29 +237,29 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: _colorEstado(estado),
                               ),
                         ),
-                        // Detalles del sistema si está conectado
+                        // Detalles de sensores si está conectado
                         if (estado == BleConnectionState.conectado) ...[
                           const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 8,
+                            runSpacing: 6,
                             children: [
                               _buildChipStatus(
-                                'Bomba ${_ble.systemStatus.bomba}',
-                                _ble.systemStatus.bomba == 'ON'
-                                    ? Colors.green
-                                    : Colors.grey,
+                                'Vacío: ${_ble.systemStatus.vacio.toStringAsFixed(1)} kPa',
+                                (_ble.systemStatus.vacio >= 38.0 && _ble.systemStatus.vacio <= 50.0)
+                                    ? Colors.blue.shade700
+                                    : Colors.orange.shade800,
                               ),
-                              const SizedBox(width: 8),
                               _buildChipStatus(
-                                '${_ble.systemStatus.vacio.toStringAsFixed(1)} kPa',
-                                Colors.blueGrey,
-                              ),
-                              const SizedBox(width: 8),
-                              _buildChipStatus(
-                                '🔋 ${_ble.systemStatus.bateria}%',
+                                '🔋 Batería: ${_ble.systemStatus.bateria}%',
                                 _ble.systemStatus.bateria > 30
-                                    ? Colors.green
-                                    : Colors.red,
+                                    ? Colors.green.shade700
+                                    : Colors.red.shade700,
+                              ),
+                              _buildChipStatus(
+                                '⚖️ HX711 Listo',
+                                Colors.teal.shade700,
                               ),
                             ],
                           ),

@@ -44,6 +44,7 @@ dependencies:
   path: ^1.9.1
   crypto: ^3.0.7
   share_plus: ^13.3.0
+  excel: ^4.0.6
 
 dev_dependencies:
   flutter_test:

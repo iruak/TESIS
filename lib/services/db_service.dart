@@ -271,6 +271,22 @@ class DBService {
     return 0.0;
   }
 
+  /// Obtiene todos los registros del sistema dentro de un rango de fechas (YYYY-MM-DD),
+  /// ordenados cronológicamente por fecha y hora ascendente.
+  Future<List<RegistroOrdeno>> obtenerRegistrosPorRango(
+      String fechaInicio, String fechaFin) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'registros_ordeno',
+      where: 'fecha >= ? AND fecha <= ?',
+      whereArgs: [fechaInicio, fechaFin],
+      orderBy: 'fecha ASC, hora ASC',
+    );
+    return List.generate(maps.length, (i) {
+      return RegistroOrdeno.fromMap(maps[i]);
+    });
+  }
+
   // --- Operaciones de Sincronización ---
 
   /// Inserta un registro solo si NO existe ya uno con el mismo vacaId+fecha+hora.

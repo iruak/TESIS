@@ -1,11 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:csv/csv.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/db_service.dart';
 import '../services/sync_service.dart';
+import '../services/reporte_excel_service.dart';
 import '../models/vaca.dart';
 import '../models/registro_ordeno.dart';
 
@@ -99,45 +97,208 @@ class _HistorialScreenState extends State<HistorialScreen> {
     }
   }
 
-  Future<void> _exportarCsv(_HistorialData data) async {
-    if (data.vacas.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay datos para exportar en esta fecha')),
-      );
-      return;
-    }
+  Future<DateTime?> _mostrarSelectorMes(
+      BuildContext context, DateTime fechaInicial) async {
+    int anoSeleccionado = fechaInicial.year;
+    int mesSeleccionado = fechaInicial.month;
+
+    const mesesNombres = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    return await showDialog<DateTime>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Icon(Icons.calendar_month_rounded,
+                      color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 10),
+                  const Text('Reporte Mensual',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+              content: SizedBox(
+                width: 320,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Selecciona el mes y año para exportar el reporte general completo en Excel (.xlsx):',
+                      style: TextStyle(fontSize: 13, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 16),
+                    // Selector de año
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back_ios_rounded,
+                                size: 18),
+                            onPressed: () {
+                              setModalState(() => anoSeleccionado--);
+                            },
+                          ),
+                          Text(
+                            '$anoSeleccionado',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_forward_ios_rounded,
+                                size: 18),
+                            onPressed: () {
+                              setModalState(() => anoSeleccionado++);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Grilla de meses
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: List.generate(12, (index) {
+                        final m = index + 1;
+                        final esSeleccionado = m == mesSeleccionado;
+                        return SizedBox(
+                          width: 68,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setModalState(() => mesSeleccionado = m);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: esSeleccionado
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: esSeleccionado
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.grey.shade300,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  mesesNombres[index].substring(0, 3),
+                                  style: TextStyle(
+                                    fontWeight: esSeleccionado
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: esSeleccionado
+                                        ? Colors.white
+                                        : Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(
+                      ctx, DateTime(anoSeleccionado, mesSeleccionado, 1)),
+                  icon: const Icon(Icons.file_download_rounded, size: 18),
+                  label: const Text('Generar Excel'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _exportarReporteMensual() async {
+    final mesElegido = await _mostrarSelectorMes(context, _selectedDate);
+    if (mesElegido == null || !mounted) return;
 
     setState(() => _isExporting = true);
 
     try {
-      final List<List<dynamic>> rows = [];
-      rows.add(['Fecha', 'Vaca', 'Número', 'Litros', 'Estado']);
+      final fechaInicio = DateFormat('yyyy-MM-01').format(mesElegido);
+      final ultimoDiaMes = DateTime(mesElegido.year, mesElegido.month + 1, 0);
+      final fechaFin = DateFormat('yyyy-MM-dd').format(ultimoDiaMes);
 
-      final fechaExport = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final registrosMes =
+          await _dbService.obtenerRegistrosPorRango(fechaInicio, fechaFin);
 
-      for (final vaca in data.vacas) {
-        final regIndex = data.registros.indexWhere((r) => r.vacaId == vaca.id);
-        final tieneRegistro = regIndex != -1;
-        final litros = tieneRegistro ? data.registros[regIndex].litros.toString() : '--';
-        final estado = tieneRegistro ? 'Visto' : 'Falta';
-        rows.add([fechaExport, vaca.nombre, vaca.numero, litros, estado]);
+      if (registrosMes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No hay ordeños registrados en este mes'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
       }
-      
-      // Agregar fila de total
-      rows.add([]);
-      rows.add(['Total del día', '', '', data.totalLitros.toString(), '']);
 
-      final String csvData = ListToCsvConverter().convert(rows);
-      final directory = await getTemporaryDirectory();
-      final path = '${directory.path}/resumen_diario_$fechaExport.csv';
-      final file = File(path);
-      await file.writeAsString(csvData);
+      final vacas = await _dbService.obtenerVacas();
 
-      await SharePlus.instance.share(ShareParams(files: [XFile(path)], text: 'Resumen Diario de Ordeño - $fechaExport'));
+      final path = await ReporteExcelService.generarReporteGeneralMensual(
+        mes: mesElegido,
+        vacas: vacas,
+        registros: registrosMes,
+      );
+
+      final nombreMes =
+          ReporteExcelService.nombreMesEspanol(mesElegido.month);
+
+      await SharePlus.instance.share(ShareParams(
+        files: [
+          XFile(
+            path,
+            mimeType:
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          )
+        ],
+        text: 'Reporte General de Ordeño - $nombreMes ${mesElegido.year}',
+      ));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al exportar: $e')),
+          SnackBar(
+            content: Text('Error al exportar reporte: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -409,18 +570,21 @@ class _HistorialScreenState extends State<HistorialScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: FilledButton.icon(
-                            onPressed: _isExporting ? null : () => _exportarCsv(data),
+                            onPressed: _isExporting ? null : _exportarReporteMensual,
                             icon: _isExporting
                                 ? const SizedBox(
                                     width: 20,
                                     height: 20,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2),
                                   )
-                                : const Icon(Icons.file_download),
-                            label: Text(_isExporting ? 'Exportando...' : 'Exportar CSV'),
+                                : const Icon(Icons.table_view_rounded),
+                            label: Text(
+                                _isExporting ? 'Exportando...' : 'Exportar Excel'),
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: Theme.of(context).colorScheme.secondary,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.secondary,
                             ),
                           ),
                         ),

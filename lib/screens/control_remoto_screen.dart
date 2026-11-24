@@ -25,7 +25,7 @@ class _ControlRemotoScreenState extends State<ControlRemotoScreen> {
           textAlign: TextAlign.center,
         ),
         content: const Text(
-          '¿Estás seguro de detener la máquina inmediatamente?\nEsto detendrá la bomba y cualquier proceso en curso.',
+          '¿Estás seguro de detener la máquina inmediatamente?\nEsto detendrá la medición y el ordeño en curso.',
           textAlign: TextAlign.center,
         ),
         actionsAlignment: MainAxisAlignment.spaceEvenly,
@@ -59,14 +59,14 @@ class _ControlRemotoScreenState extends State<ControlRemotoScreen> {
     }
   }
 
-  Future<void> _iniciarLimpieza() async {
+  Future<void> _tararBalde() async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.cleaning_services, size: 40, color: Colors.blue),
-        title: const Text('Iniciar Limpieza'),
+        icon: const Icon(Icons.scale, size: 40, color: Colors.teal),
+        title: const Text('Tarar Balde (HX711)'),
         content: const Text(
-          '¿Deseas enviar el comando para iniciar el ciclo de limpieza del sistema?',
+          '¿Deseas calibrar a cero el sensor de peso?\nAsegúrate de que el balde esté vacío antes de continuar.',
           textAlign: TextAlign.center,
         ),
         actions: [
@@ -75,20 +75,21 @@ class _ControlRemotoScreenState extends State<ControlRemotoScreen> {
             child: const Text('Cancelar'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.teal),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Iniciar'),
+            child: const Text('Tarar a 0'),
           ),
         ],
       ),
     );
 
     if (confirmar == true) {
-      await _ble.enviarComando('CLEAN');
+      await _ble.tararBalde();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🧹 Comando de limpieza enviado al equipo'),
-            backgroundColor: Colors.blue,
+            content: Text('⚖️ Balde tarado a 0.00 L (Sensor HX711)'),
+            backgroundColor: Colors.teal,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -327,43 +328,60 @@ class _ControlRemotoScreenState extends State<ControlRemotoScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
+                        // Sensores del Hardware: MPXV6115V, HX711, RC522 y Batería 12V
                         Row(
                           children: [
                             Expanded(
                               child: _buildIndicadorItem(
                                 context,
-                                label: 'Bomba',
-                                valor: conectado ? status.bomba : '--',
-                                icon: Icons.power_settings_new,
-                                color: conectado && status.bomba == 'ON'
-                                    ? Colors.green
-                                    : Colors.grey,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _buildIndicadorItem(
-                                context,
-                                label: 'Vacío',
+                                label: 'Vacío (MPXV6115V)',
                                 valor: conectado
                                     ? '${status.vacio.toStringAsFixed(1)} kPa'
                                     : '-- kPa',
-                                icon: Icons.speed,
-                                color: conectado ? Colors.blueGrey : Colors.grey,
+                                icon: Icons.speed_rounded,
+                                color: conectado
+                                    ? ((status.vacio >= 38.0 && status.vacio <= 50.0)
+                                        ? Colors.blue.shade700
+                                        : Colors.orange.shade800)
+                                    : Colors.grey,
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: _buildIndicadorItem(
                                 context,
-                                label: 'Batería',
+                                label: 'Batería (12V)',
                                 valor: conectado ? '${status.bateria}%' : '--%',
-                                icon: Icons.battery_charging_full,
+                                icon: Icons.battery_charging_full_rounded,
                                 color: conectado
                                     ? (status.bateria > 20
-                                        ? Colors.teal
+                                        ? Colors.green.shade700
                                         : Colors.red)
                                     : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildIndicadorItem(
+                                context,
+                                label: 'Celda Peso (HX711)',
+                                valor: conectado ? 'Listo' : '--',
+                                icon: Icons.scale_rounded,
+                                color: conectado ? Colors.teal.shade700 : Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildIndicadorItem(
+                                context,
+                                label: 'Lector RFID (RC522)',
+                                valor: conectado ? 'Activo' : '--',
+                                icon: Icons.nfc_rounded,
+                                color: conectado ? Colors.indigo.shade700 : Colors.grey,
                               ),
                             ),
                           ],
@@ -416,7 +434,7 @@ class _ControlRemotoScreenState extends State<ControlRemotoScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Detener la máquina inmediatamente',
+                            'Detener la medición y ordeño inmediatamente',
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.85),
                               fontSize: 13,
@@ -430,10 +448,10 @@ class _ControlRemotoScreenState extends State<ControlRemotoScreen> {
 
                 const SizedBox(height: 20),
 
-                // Acciones secundarias
+                // Acciones secundarias: Tarar balde (HX711) y Siguiente Vaca
                 Row(
                   children: [
-                    // Botón Limpieza
+                    // Botón Tarar Balde (HX711) - Corresponde al botón físico Tara D16
                     Expanded(
                       child: Card(
                         elevation: 2,
@@ -442,20 +460,20 @@ class _ControlRemotoScreenState extends State<ControlRemotoScreen> {
                         ),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-                          onTap: conectado ? _iniciarLimpieza : null,
+                          onTap: conectado ? _tararBalde : null,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                                 vertical: 16.0, horizontal: 12.0),
                             child: Column(
                               children: [
                                 Icon(
-                                  Icons.cleaning_services_rounded,
+                                  Icons.scale_rounded,
                                   size: 32,
-                                  color: conectado ? Colors.blue : Colors.grey,
+                                  color: conectado ? Colors.teal : Colors.grey,
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Iniciar Limpieza',
+                                  'Tarar Balde (HX711)',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,

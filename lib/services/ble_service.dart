@@ -10,14 +10,16 @@ enum BleConnectionState {
 }
 
 class SystemStatus {
-  final String bomba;
-  final double vacio;
-  final int bateria;
+  final double vacio; // Presión de vacío (Sensor MPXV6115V) en kPa
+  final int bateria; // Batería 12V (%)
+  final bool pesoListo; // Módulo de peso (HX711) listo
+  final bool rfidListo; // Lector RFID (RC522) activo
 
   SystemStatus({
-    this.bomba = 'OFF',
     this.vacio = 0.0,
     this.bateria = 0,
+    this.pesoListo = true,
+    this.rfidListo = true,
   });
 }
 
@@ -93,7 +95,7 @@ class BleService extends ChangeNotifier {
     debugPrint('[BleService] conectar() iniciado. Modo simulado: $modoSimulado');
     if (modoSimulado) {
       estadoConexion = BleConnectionState.conectado;
-      systemStatus = SystemStatus(bomba: 'ON', vacio: 42.0, bateria: 100);
+      systemStatus = SystemStatus(vacio: 42.0, bateria: 100);
       debugPrint('[BleService] Estado cambiado a: conectado');
       notifyListeners();
 
@@ -105,7 +107,7 @@ class BleService extends ChangeNotifier {
           return;
         }
 
-        // Vacío oscila entre 40 y 45
+        // Vacío del sensor MPXV6115V oscila en rango óptimo de ordeño (40.0 - 45.0 kPa)
         double v = 40.0 + _rnd.nextDouble() * 5.0; 
         // Batería baja muy lentamente
         int b = systemStatus.bateria;
@@ -113,7 +115,7 @@ class BleService extends ChangeNotifier {
           b--; 
         }
         
-        _procesarMensajeEntrante("STATUS|ON|${v.toStringAsFixed(1)}|$b");
+        _procesarMensajeEntrante("STATUS|${v.toStringAsFixed(1)}|$b");
       });
 
       // Simular sincronización de históricos pendientes tras conectar
@@ -214,6 +216,12 @@ class BleService extends ChangeNotifier {
     }
   }
 
+  /// Envía comando TARE para poner a cero la celda de carga HX711 (Botón Tara en hardware)
+  Future<void> tararBalde() async {
+    debugPrint('[BleService] tararBalde() (Tara celda HX711) llamado');
+    await enviarComando("TARE");
+  }
+
   // ==========================================
   // SIMULACIÓN DE SINCRONIZACIÓN
   // ==========================================
@@ -281,11 +289,21 @@ class BleService extends ChangeNotifier {
         break;
         
       case 'STATUS':
-        if (partes.length >= 4) {
+        // Compatible con STATUS|vacio|bateria (sensor MPXV6115V y batería)
+        // y con legado STATUS|bomba|vacio|bateria
+        if (partes.length >= 3) {
+          final double? vacioVal = partes.length >= 4
+              ? double.tryParse(partes[2])
+              : double.tryParse(partes[1]);
+          final int? batVal = partes.length >= 4
+              ? int.tryParse(partes[3])
+              : int.tryParse(partes[2]);
+
           systemStatus = SystemStatus(
-            bomba: partes[1],
-            vacio: double.tryParse(partes[2]) ?? systemStatus.vacio,
-            bateria: int.tryParse(partes[3]) ?? systemStatus.bateria,
+            vacio: vacioVal ?? systemStatus.vacio,
+            bateria: batVal ?? systemStatus.bateria,
+            pesoListo: true,
+            rfidListo: true,
           );
           notifyListeners();
         }
